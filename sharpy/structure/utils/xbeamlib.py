@@ -381,8 +381,18 @@ def xbeam_solv_couplednlndyn(beam, settings):
     psi_dot_def_history = np.zeros((n_tsteps.value, beam.num_elem, 3, 3), order='F', dtype=ct.c_double)
 
     dynamic_force = np.zeros((n_nodes.value, 6, n_tsteps.value), dtype=ct.c_double, order='F')
+
+    # why is this needed for ALL previous time steps??
     for it in range(n_tsteps.value):
         dynamic_force[:, :, it] = beam.dynamic_input[it]['dynamic_forces']
+
+    # propose:
+    dynamic_force[:, :, it] = beam.dynamic_input[it]['dynamic_forces']
+    dynamic_force[:, :, it] += beam.dynamic_input[it]['dynamic_gfor_forces']
+
+    import pdb
+    pdb.set_trace()
+
 
     # status flag
     success = ct.c_bool(True)

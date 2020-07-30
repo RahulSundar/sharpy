@@ -1965,3 +1965,35 @@ def normsq3d(v):
         np.ndarray: Square of the norm of the vector
     """
     return v[0]*v[0]+v[1]*v[1]+v[2]*v[2]
+
+
+def get_transformation_matrix(transformation):
+
+    if transformation == 'ab':
+        cab = crv2rotation
+        return cab
+    elif transformation == 'ba':
+        def cba(psi):
+            return crv2rotation(psi).T
+        return cba
+    elif transformation == 'ga':
+        cga = quat2rotation
+        return cga
+    elif transformation == 'ag':
+        def cag(quat):
+            return quat2rotation(quat).T
+        return cag
+    elif transformation == 'bg':
+        def cbg(psi, quat):
+            cag = get_transformation_matrix('ag')
+            cba = get_transformation_matrix('ba')
+            return cba(psi).dot(cag(quat))
+        return cbg
+    elif transformation == 'gb':
+        def cgb(psi, quat):
+            cab = get_transformation_matrix('ba')
+            cga = get_transformation_matrix('ga')
+            return cga(quat).dot(cab(psi))
+        return cgb
+    else:
+        raise NameError('Unknown transformation.')

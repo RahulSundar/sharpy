@@ -698,8 +698,9 @@ class DynamicCoupled(BaseSolver):
                 (struct_forces + self.data.structure.ini_info.steady_applied_forces).
                 astype(dtype=ct.c_double, order='F', copy=True))
             structural_kstep.unsteady_applied_forces = (
-                (dynamic_struct_forces + self.data.structure.dynamic_input[max(self.data.ts - 1, 0)]['dynamic_forces']).
-                astype(dtype=ct.c_double, order='F', copy=True))
+                (dynamic_struct_forces + self.data.structure.dynamic_input[max(self.data.ts - 1, 0)]['dynamic_forces']
+                 + self.data.structure.dynamic_input[max(self.data.ts - 1, 0)]['dynamic_gfor_forces']).
+                astype(dtype=ct.c_double, order='F', copy=True)) * unsteady_forces_coeff
         except KeyError:
             structural_kstep.steady_applied_forces = (
                 (struct_forces + self.data.structure.ini_info.steady_applied_forces).

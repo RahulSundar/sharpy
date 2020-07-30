@@ -80,6 +80,9 @@ class NonLinearDynamicCoupledStep(_BaseStructural):
         if dt is None:
             dt = self.settings['dt']
 
+        # adjust orientation of dynamic_gfor_forces
+        self.adjust_g_frame_forces()
+
         xbeamlib.xbeam_step_couplednlndyn(self.data.structure,
                                           self.settings,
                                           self.data.ts,
@@ -114,3 +117,16 @@ class NonLinearDynamicCoupledStep(_BaseStructural):
         step.total_forces = np.sum(applied_forces_copy, axis=0)
         step.total_gravity_forces = np.sum(gravity_forces_copy, axis=0)
         return totals[0:3], totals[3:6]
+
+    def adjust_g_frame_forces(self, step=None):
+        if step is None:
+            step = self.data.structure.timestep_info[-1]
+
+        # transform to b frame
+        it = len(self.data.structure.timestep_info) - 1 # time step
+        for i_node in range(self.data.structure.num_node):
+            self.data.structure.dyn_dict['dynamic_gfor_forces'][it] = \
+                self.data.structure.nodal_for_transformation(self.data.structure.dyn_dict['dynamic_gfor_forces'][it],
+                                                             transformation='bg',
+                                                             tstep=step)
+

@@ -65,7 +65,6 @@ class Beam(BaseStructure):
         self.global_nodes_num = None
         self.global_elems_num = None
 
-
     def generate(self, in_data, settings):
         self.settings = settings
         # read and store data
@@ -236,6 +235,23 @@ class Beam(BaseStructure):
             for it in range(num_steps):
                 self.dynamic_input[it]['for_acc'] = np.zeros((6, ), dtype=ct.c_double, order='F')
 
+        try:
+            for it in range(num_steps):
+                self.dynamic_input[it]['dynamic_gfor_forces'] = dyn_dict['dynamic_gfor_forces'][it, :, :].copy()
+        except KeyError:
+            for it in range(num_steps):
+                self.dynamic_input[it]['dynamic_gfor_forces'] = np.zeros((self.num_node, 6),
+                                                                         dtype=ct.c_double,
+                                                                         order='F')
+
+        try:
+            for it in range(num_steps):
+                self.dynamic_input[it]['external_mass'] = dyn_dict['external_mass'][it, :].copy()
+        except KeyError:
+            for it in range(num_steps):
+                self.dynamic_input[it]['external_mass'] = np.zeros((self.num_node,),
+                                                                   dtype=ct.c_double,
+                                                                   order='F')
         # try:
         #     for it in range(num_steps):
         #         self.dynamic_input[it]['trayectories'] = dyn_dict['trayectories'][it, :, :]
@@ -481,6 +497,51 @@ class Beam(BaseStructure):
                     nodal_a[i_node, i] = temp[i]
 
         return nodal_a
+
+    def nodal_for_transformation(self, nodal, transformation, tstep, filter=np.array([True]*6)):
+        """
+        Projects a nodal variable from the local, body-attached frame (B) to the reference A frame.
+
+        Args:
+            nodal (np.array): Nodal variable of size ``(num_node, 6)``
+            tstep (sharpy.datastructures.StructTimeStepInfo): structural time step info.
+            filter (np.array): optional argument that filters and does not convert a specific degree of
+              freedom. Defaults to ``np.array([True, True, True, True, True, True])``.
+
+        Returns:
+            np.array: the ``nodal`` argument projected onto the reference ``A`` frame.
+        """
+        nodal_a = nodal.copy(order='F')
+        matrix_f = algebra.get_transformation_matrix(transformation)
+        if 'b' in transformation and 'g' in transformation:
+            def matrix_f(psi):
+                return algebra.get_transformation_matrix(transformation)(psi, tstep.quat)
+        elif 'g' in transformation:
+            def matrix_f(psi):
+                return algebra.get_transformation_matrix(transformation)(tstep.quat)
+
+        aero2inertial = tstep.cga()
+        for i_node in range(self.num_node):
+            # get master elem and i_local_node
+            i_master_elem, i_local_node = self.node_master_elem[i_node, :]
+            crv = tstep.psi[i_master_elem, i_local_node, :]
+            transformation_matrix = matrix_f(crv)
+
+            # cab = algebra.crv2rotation(crv)
+            # transformation_matrix = aero2inertial.T
+
+            # transformation_matrix = np.eye(3) * 2
+            # transformation_matrix = np.matmul(cab.T, aero2inertial.T)  # safe bet for now
+            temp = np.zeros((6,))
+            temp[0:3] = np.dot(transformation_matrix, nodal[i_node, 0:3])
+            temp[3:6] = np.dot(transformation_matrix, nodal[i_node, 3:6])
+            for i in range(6):
+                if filter[i]:
+                    nodal_a[i_node, i] = temp[i]
+
+        return nodal_a
+
+
 
     def nodal_premultiply_inv_T_transpose(self, nodal, tstep, filter=np.array([True]*6)):
         # nodal_t = np.zeros_like(nodal, dtype=ct.c_double, order='F')

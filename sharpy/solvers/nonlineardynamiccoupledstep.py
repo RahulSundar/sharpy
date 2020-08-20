@@ -10,7 +10,7 @@ from sharpy.utils.settings import str2bool
 from sharpy.utils.solver_interface import solver, BaseSolver, solver_from_string
 import sharpy.utils.settings as settings
 import sharpy.utils.cout_utils as cout
-
+import sharpy.utils.algebra as algebra
 
 _BaseStructural = solver_from_string('_BaseStructural')
 
@@ -80,6 +80,9 @@ class NonLinearDynamicCoupledStep(_BaseStructural):
         if dt is None:
             dt = self.settings['dt']
 
+        # adjust orientation of dynamic_gfor_forces
+        self.adjust_g_frame_forces(structural_step)
+
         xbeamlib.xbeam_step_couplednlndyn(self.data.structure,
                                           self.settings,
                                           self.data.ts,
@@ -99,8 +102,9 @@ class NonLinearDynamicCoupledStep(_BaseStructural):
     def extract_resultants(self, step=None):
         if step is None:
             step = self.data.structure.timestep_info[-1]
-        applied_forces = self.data.structure.nodal_b_for_2_a_for(step.steady_applied_forces + step.unsteady_applied_forces,
-                                                                 step)
+        applied_forces = self.data.structure.nodal_b_for_2_a_for(
+            step.steady_applied_forces + step.unsteady_applied_forces,
+            step)
 
         applied_forces_copy = applied_forces.copy()
         gravity_forces_copy = step.gravity_forces.copy()
@@ -113,4 +117,22 @@ class NonLinearDynamicCoupledStep(_BaseStructural):
         totals = np.sum(applied_forces_copy + gravity_forces_copy, axis=0)
         step.total_forces = np.sum(applied_forces_copy, axis=0)
         step.total_gravity_forces = np.sum(gravity_forces_copy, axis=0)
+
         return totals[0:3], totals[3:6]
+
+    def adjust_g_frame_forces(self, step=None):
+        if step is None:
+            step = self.data.structure.timestep_info[-1]
+
+        # transform to b frame
+        it = len(self.data.structure.timestep_info) - 1  # time step index
+        self.data.structure.dynamic_input[it]['dynamic_gfor_forces'] = \
+            self.data.structure.nodal_for_transformation(self.data.structure.dyn_dict['dynamic_gfor_forces'][it],
+                                                         transformation='bg',
+                                                         tstep=step)
+
+        for i_node in range(self.data.structure.num_node):
+            # Add inertial contribution - inertial forces in B frame
+            inertial_force = self.data.structure.dyn_dict['external_mass'][it, i_node] * step.for_acc[:3]
+            # assume the mass has no associated inertia
+            self.data.structure.dynamic_input[it]['dynamic_gfor_forces'][i_node, :3] += inertial_force
